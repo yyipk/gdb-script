@@ -1,0 +1,162 @@
+set pagination off
+target remote :1025
+
+define task_dump
+  printf "-----------------------------------------------Current Task info---------------------------------------\n"
+  printf "\r\n\r\n"
+  d_task pxCurrentTCB
+  printf "-----------------------------------------------Ready Task info-----------------------------------------\n"
+  printf "\r\n\r\n"
+  ready_task_list
+  printf "-----------------------------------------------Delayed Task info---------------------------------------\n"
+  printf "\r\n\r\n"
+  task_list xDelayedTaskList1
+  task_list xDelayedTaskList2
+  printf "-----------------------------------------------PendingReady Task info----------------------------------\n"
+  printf "\r\n\r\n"
+  task_list xPendingReadyList
+  printf "-----------------------------------------------Suspended Task info-------------------------------------\n"
+  printf "\r\n\r\n"
+  task_list xSuspendedTaskList 
+end
+
+define task_dumpfp
+     set $spTemp = $sp
+     set $raTemp = $ra
+     set $pcTemp = $pc
+
+     printf "-----------------------------------------------Current Task info---------------------------------------\n"
+     if TrapNetCounter == 0
+          bt
+     else 
+          set $taskName = pxCurrentTCB->pcTaskName
+          set $pxTopOfStack = pxCurrentTCB->pxTopOfStack
+
+          if $pxTopOfStack != 0
+               printf "####################### task name is: %s\r\n", $taskName
+               set $sp = $pxTopOfStack + 64
+               set $ra = $pxTopOfStack[35]
+               set $pc = $pxTopOfStack[0]
+               bt
+          end
+     end
+     printf "\r\n\r\n"
+
+     printf "-----------------------------------------------Ready Task info-----------------------------------------\n"
+     set $uxTopPriority = 0
+     while $uxTopPriority < 32
+          set $item = pxReadyTasksLists[ $uxTopPriority ]
+          iterList $item
+          set $uxTopPriority = $uxTopPriority + 1
+     end  
+     printf "\r\n\r\n"
+
+     printf "-----------------------------------------------Delayed Task info---------------------------------------\n"
+     iterList xDelayedTaskList1
+     iterList xDelayedTaskList2
+     printf "\r\n\r\n"
+
+     printf "-----------------------------------------------PendingReady Task info----------------------------------\n"
+     iterList xPendingReadyList
+     printf "\r\n\r\n"
+
+     printf "-----------------------------------------------Suspended Task info-------------------------------------\n"
+     iterList xSuspendedTaskList
+     set $sp = $spTemp
+     set $ra = $raTemp
+     set $pc = $pcTemp
+end
+
+define d_task
+  set $SAVE_FRAME_SIZE=30
+  p *(TCB_t *)$arg0
+  set $pc = *((TCB_t *)$arg0)->pxTopOfStack - 4
+  set $sp = ((TCB_t *)$arg0)->pxTopOfStack + $SAVE_FRAME_SIZE
+  # have can run bt
+ 
+  set $t0 = *(uint32_t *)($sp - 120 + 8)
+  set $t1 = *(uint32_t *)($sp - 120 + 12)
+  set $t2 = *(uint32_t *)($sp - 120 + 16)
+  set $s0 = *(uint32_t *)($sp - 120 + 20)
+  set $s1 = *(uint32_t *)($sp - 120 + 24)
+  set $a0 = *(uint32_t *)($sp - 120 + 28)
+  set $a1 = *(uint32_t *)($sp - 120 + 32)
+  set $a2 = *(uint32_t *)($sp - 120 + 36)
+  set $a3 = *(uint32_t *)($sp - 120 + 40)
+  set $a4 = *(uint32_t *)($sp - 120 + 44)
+  set $a5 = *(uint32_t *)($sp - 120 + 48)
+  set $a6 = *(uint32_t *)($sp - 120 + 52)
+  set $a7 = *(uint32_t *)($sp - 120 + 56)
+  set $s2 = *(uint32_t *)($sp - 120 + 60)
+  set $s3 = *(uint32_t *)($sp - 120 + 64)
+  set $s4 = *(uint32_t *)($sp - 120 + 68)
+  set $s5 = *(uint32_t *)($sp - 120 + 72)
+  set $s6 = *(uint32_t *)($sp - 120 + 76)
+  set $s7 = *(uint32_t *)($sp - 120 + 80)
+  set $s8 = *(uint32_t *)($sp - 120 + 84)
+  set $s9 = *(uint32_t *)($sp - 120 + 88)
+  set $s10 = *(uint32_t *)($sp - 120 + 92) 
+  set $s11 = *(uint32_t *)($sp - 120 + 96)
+  set $t3 = *(uint32_t *)($sp - 120 + 100)
+  set $t4 = *(uint32_t *)($sp - 120 + 104)
+  set $t5 = *(uint32_t *)($sp - 120 + 108)
+  set $t6 = *(uint32_t *)($sp - 120 + 112)
+  bt 
+end
+
+define task_ready
+    set $current_task = xTasksWaitingTermination.xListEnd.pxNext
+    set $end_task = &xTasksWaitingTermination.xListEnd
+
+    while $current_task != $end_task
+        set $pxTCB = (TCB_t*)($current_task->pvOwner)
+        printf "\n####################### Task Name: %s\n", $pxTCB->pcTaskName
+        set $current_task = $current_task->pxNext
+    end
+end
+
+define task_list
+    set $item = $arg0.xListEnd.pxPrevious
+    while ($item != &$arg0.xListEnd)
+      p $item.pvOwner
+      printf "\n####################### Task Name: %s\n", ((TCB_t *)$item.pvOwner)->pcTaskName 
+      d_task $item.pvOwner
+      set $item = $item.pxPrevious
+    end
+end
+ 
+# Ready状态
+define ready_task_list
+    set $i = 0
+    while ($i < 32)
+        task_list pxReadyTasksLists[$i]
+        set $i = $i + 1
+    end
+end
+
+define iterList
+     set $itemNum = $arg0.uxNumberOfItems
+     set $index = $arg0.pxIndex
+     set $next = $index->pxNext
+
+     while $itemNum
+          set $tcb = (TCB_t *) $next->pvOwner
+          set $taskName = $tcb->pcTaskName
+          set $pxTopOfStack = $tcb->pxTopOfStack
+
+          if $pxTopOfStack != 0
+               printf "####################### task name is: %s\r\n", $taskName
+               p *(TCB_t *)$tcb
+               set $sp = $pxTopOfStack + 64
+               set $ra = $pxTopOfStack[35]
+               set $pc = $pxTopOfStack[0]
+               bt
+
+               set $itemNum = $itemNum - 1
+          end
+
+          set $next = $next->pxNext
+          printf "\r\n"
+     end
+end
+

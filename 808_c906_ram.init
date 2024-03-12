@@ -1,0 +1,9 @@
+set architecture riscv:rv64
+#target remote :3333
+#set disassemble-next-line on
+set print pretty
+set mem inaccessible-by-default off
+#gdb_breakpoint_override [hard|soft|disable]
+
+mem 0x50800000 0x50850000 ro
+mem 0x50850000 0x51000000 rw
